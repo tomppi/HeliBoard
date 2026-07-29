@@ -32,9 +32,14 @@ object FoldableUtils {
             field = value
         }
 
+    private fun isQ5q(): Boolean =
+        Build.DEVICE.equals("q5q", ignoreCase = true)
+                || Build.PRODUCT.contains("q5q", ignoreCase = true)
+                || Build.MODEL.equals("SM-F946B", ignoreCase = true)
+
     /** set [isFoldable] */
     fun init(context: Context) {
-        isFoldable = getFeatureString(context) != null || hasFoldSensor(context)
+        isFoldable = isQ5q() || getFeatureString(context) != null || hasFoldSensor(context)
         Log.i(TAG, if (isFoldable) "foldable" else "not foldable")
     }
 
