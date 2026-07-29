@@ -70,6 +70,7 @@ fun AppearanceScreen(
         SettingsWithoutKey.BACKGROUND_IMAGE,
         SettingsWithoutKey.BACKGROUND_IMAGE_LANDSCAPE,
         R.string.settings_category_miscellaneous,
+        FoldableUtils.PREF_FORCE_FOLDABLE,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD,
         if (prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE, Defaults.PREF_ENABLE_SPLIT_KEYBOARD)
             || prefs.getBoolean(Settings.PREF_ENABLE_SPLIT_KEYBOARD, Defaults.PREF_ENABLE_SPLIT_KEYBOARD)
@@ -206,6 +207,10 @@ fun createAppearanceSettings(context: Context) = listOf(
         R.string.customize_background_image_landscape, R.string.summary_customize_background_image_landscape)
     {
         BackgroundImagePref(it, true)
+    },
+    Setting(context, FoldableUtils.PREF_FORCE_FOLDABLE, R.string.force_foldable_device, R.string.force_foldable_device_summary) { setting ->
+        val ctx = LocalContext.current
+        SwitchPreference(setting, false) { FoldableUtils.init(ctx) }
     },
     Setting(context, Settings.PREF_ENABLE_SPLIT_KEYBOARD, R.string.enable_split_keyboard) {
         var show by remember { mutableStateOf(false) }
