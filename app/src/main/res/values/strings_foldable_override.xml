@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="force_foldable_device">Treat this device as foldable</string>
-    <string name="force_foldable_device_summary">Show folded layout settings even when Android does not identify the device as foldable</string>
+    <string name="force_foldable_device_summary">Use the current display width to switch between folded and unfolded keyboard settings</string>
+    <string name="unfolded">Unfolded</string>
 </resources>
