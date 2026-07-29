@@ -94,6 +94,7 @@ private fun KeyboardScaleDialog(
     positionString: (Float) -> String,
 ) {
     val (variants, keys) = createVariantsAndKeys(dimensions, baseKey)
+    val defaultString = stringResource(R.string.button_default)
     val foldedString = stringResource(R.string.folded)
     val landscapeString = stringResource(R.string.landscape)
     val unfoldedString = stringResource(R.string.unfolded)
@@ -106,12 +107,16 @@ private fun KeyboardScaleDialog(
         Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED,
         Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED_LANDSCAPE,
     )
-    val splitModeNames = listOf(
-        unfoldedString,
-        "$unfoldedString / $landscapeString",
-        foldedString,
-        "$foldedString / $landscapeString",
-    )
+    val splitModeNames = if (FoldableUtils.isFoldable) {
+        listOf(
+            unfoldedString,
+            "$unfoldedString / $landscapeString",
+            foldedString,
+            "$foldedString / $landscapeString",
+        )
+    } else {
+        listOf(defaultString, landscapeString, foldedString, "$foldedString / $landscapeString")
+    }
     var enabledSplitModes by remember {
         mutableStateOf(splitModeKeys.map { prefs.getBoolean(it, Defaults.PREF_ENABLE_SPLIT_KEYBOARD) })
     }
@@ -164,7 +169,8 @@ private fun KeyboardScaleDialog(
                         val selectedByDimensions = variant.split(SPLIT).none { it in forbiddenDimensions }
                         val visible = selectedByDimensions && (!isSplitSpacer || enabledSplitModes[i])
                         AnimatedVisibility(visible, exit = fadeOut(), enter = fadeIn()) {
-                            WithSmallTitle(variant.ifEmpty { unfoldedString }) {
+                            val defaultVariantName = if (isSplitSpacer && FoldableUtils.isFoldable) unfoldedString else defaultString
+                            WithSmallTitle(variant.ifEmpty { defaultVariantName }) {
                                 Slider(
                                     value = sliderPosition,
                                     onValueChange = { sliderPosition = it },
@@ -176,7 +182,7 @@ private fun KeyboardScaleDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(positionString(sliderPosition))
-                                    TextButton({ sliderPosition = defaultValues[i] }) { Text(stringResource(R.string.button_default)) }
+                                    TextButton({ sliderPosition = defaultValues[i] }) { Text(defaultString) }
                                 }
                                 Spacer(Modifier.height(6.dp))
                             }
