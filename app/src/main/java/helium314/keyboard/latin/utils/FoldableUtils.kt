@@ -13,7 +13,9 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.latin.define.DebugFlags
+import helium314.keyboard.latin.settings.Settings as KeyboardSettings
 import java.util.regex.Pattern
 import kotlin.text.split
 
@@ -26,8 +28,6 @@ object FoldableUtils {
     var isFolded = false
         private set(value) {
             if (field == value) return
-            // we could reload the keyboard at this point, but according to a user this is not necessary
-            // https://github.com/HeliBorg/HeliBoard/issues/1063#issuecomment-4178571414
             Log.v(TAG, "set isFolded to $value")
             field = value
         }
@@ -96,8 +96,20 @@ object FoldableUtils {
     }
 
     /** Observes changes to [DISPLAY_FEATURES] or hinge angle, and updates [isFolded] on changes */
-    class FoldableObserver(context: Context) {
+    class FoldableObserver(private val context: Context) {
         var sensorForDebug = false
+
+        private fun updateFoldedState(folded: Boolean) {
+            if (isFolded == folded) return
+            isFolded = folded
+
+            // Fold state and display configuration can be delivered in either order. Reloading here
+            // ensures fold-specific settings and the active layout use the newly detected state.
+            val settings = KeyboardSettings.getInstance()
+            val current = settings.current ?: return
+            settings.loadSettings(context, current.mLocale, current.mInputAttributes)
+            KeyboardSwitcher.getInstance().reloadKeyboard()
+        }
 
         private val featureStringObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -109,7 +121,7 @@ object FoldableUtils {
                 }
                 if (DebugFlags.DEBUG_ENABLED)
                     Log.v(TAG, "$DISPLAY_FEATURES changed: $featuresString")
-                isFolded = extractFoldedState(featuresString)
+                updateFoldedState(extractFoldedState(featuresString))
             }
         }
 
@@ -122,7 +134,7 @@ object FoldableUtils {
                 // * 160° is the change between half-open and flat
                 // maybe we should use the sensor range? wait for bug reports + logs
                 if (!sensorForDebug)
-                    isFolded = (angle ?: 180f) < 40
+                    updateFoldedState((angle ?: 180f) < 40)
                 if (DebugFlags.DEBUG_ENABLED)
                     Log.v(TAG, "sensor changed: ${event.values?.toList()}")
             }
@@ -133,7 +145,7 @@ object FoldableUtils {
             val featureString = getFeatureString(context)
             if (featureString != null) {
                 context.contentResolver.registerContentObserver(displayFeaturesUri, false, featureStringObserver)
-                isFolded = extractFoldedState(featureString)
+                updateFoldedState(extractFoldedState(featureString))
                 Log.v(TAG, "using $DISPLAY_FEATURES, folded: $isFolded")
             }
             if (hasFoldSensor(context) && (featureString == null || DebugFlags.DEBUG_ENABLED)) {
