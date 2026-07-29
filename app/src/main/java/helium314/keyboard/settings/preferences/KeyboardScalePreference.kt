@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.preferences
 
+import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,36 +33,40 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.settings.Defaults
+import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.settings.createPrefKeyForBooleanSettings
 import helium314.keyboard.latin.utils.FoldableUtils
-import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.Theme
+import helium314.keyboard.latin.utils.prefs
+import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.settings.WithSmallTitle
 import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
-import helium314.keyboard.latin.utils.previewDark
-import androidx.core.content.edit
 
 // actual key for each setting is baseKey with one _true/_false appended per dimension (need to keep order!)
-// should dimension checkboxes have any other effect than just showing / hiding sliders?
-//  one could argue that e.g. when disabling the split checkbox, then split mode should not affect the setting
 @Composable
 fun KeyboardScalePreference(
     name: String,
     baseKey: String,
     dimensions: List<String>,
     defaults: Array<Float>,
-    range:  ClosedFloatingPointRange<Float>,
+    range: ClosedFloatingPointRange<Float>,
     description: (Float) -> String,
     onDone: () -> Unit
 ) {
     if (defaults.size != 1.shl(dimensions.size))
         throw ArithmeticException("defaults size does not match with dimensions, expected ${1.shl(dimensions.size)}, got ${defaults.size}")
+
+    val prefs = LocalContext.current.prefs()
+    if (baseKey == Settings.PREF_SPLIT_SPACER_SCALE_PREFIX && !isAnySplitKeyboardEnabled(prefs))
+        return
+
     var showDialog by remember { mutableStateOf(false) }
     Preference(
         name = name,
         onClick = { showDialog = true },
-        // no description because it can easily take up too much space
     )
     if (showDialog)
         KeyboardScaleDialog(
@@ -76,7 +81,6 @@ fun KeyboardScalePreference(
         )
 }
 
-// SliderDialog specialized for keyboard scale settings using multiple sliders with same range, each with a different setting and title
 @Composable
 private fun KeyboardScaleDialog(
     onDismissRequest: () -> Unit,
@@ -90,10 +94,28 @@ private fun KeyboardScaleDialog(
     positionString: (Float) -> String,
 ) {
     val (variants, keys) = createVariantsAndKeys(dimensions, baseKey)
-    val foldedString = stringResource(R.string.folded) // we want to hide foldable settings for non-foldable phones
+    val foldedString = stringResource(R.string.folded)
+    val landscapeString = stringResource(R.string.landscape)
+    val unfoldedString = stringResource(R.string.unfolded)
     val ctx = LocalContext.current
-    var checked by remember { mutableStateOf(dimensions.map { FoldableUtils.isFoldable || !it.contains(foldedString) }) }
     val prefs = ctx.prefs()
+    val isSplitSpacer = baseKey == Settings.PREF_SPLIT_SPACER_SCALE_PREFIX
+    val splitModeKeys = listOf(
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED_LANDSCAPE,
+    )
+    val splitModeNames = listOf(
+        unfoldedString,
+        "$unfoldedString / $landscapeString",
+        foldedString,
+        "$foldedString / $landscapeString",
+    )
+    var enabledSplitModes by remember {
+        mutableStateOf(splitModeKeys.map { prefs.getBoolean(it, Defaults.PREF_ENABLE_SPLIT_KEYBOARD) })
+    }
+    var checked by remember { mutableStateOf(dimensions.map { FoldableUtils.isFoldable || !it.contains(foldedString) }) }
     val done = remember { mutableMapOf<String, () -> Unit>() }
 
     ThreeButtonAlertDialog(
@@ -107,9 +129,21 @@ private fun KeyboardScaleDialog(
             ) {
                 val state = rememberScrollState()
                 Column(Modifier.verticalScroll(state)) {
-                    if (dimensions.size > 1) {
+                    if (isSplitSpacer) {
+                        splitModeNames.forEachIndexed { index, modeName ->
+                            if (FoldableUtils.isFoldable || index < 2) {
+                                DimensionCheckbox(enabledSplitModes[index], modeName) { enabled ->
+                                    enabledSplitModes = enabledSplitModes.mapIndexed { i, old ->
+                                        if (i == index) enabled else old
+                                    }
+                                    prefs.edit { putBoolean(splitModeKeys[index], enabled) }
+                                    onDone()
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    } else if (dimensions.size > 1) {
                         dimensions.forEachIndexed { i, dimension ->
-                            // hide "folded" box for non-foldables
                             if (FoldableUtils.isFoldable || !dimension.contains(foldedString))
                                 DimensionCheckbox(checked[i], dimension) {
                                     checked = checked.mapIndexed { j, c -> if (i == j) it else c }
@@ -127,10 +161,10 @@ private fun KeyboardScaleDialog(
                                     prefs.edit { putFloat(key, sliderPosition) }
                             }
                         val forbiddenDimensions = dimensions.filterIndexed { index, _ -> !checked[index] }
-                        val visible = variant.split(SPLIT).none { it in forbiddenDimensions }
-                        // default animations make the dialog flash (see also DictionaryDialog)
+                        val selectedByDimensions = variant.split(SPLIT).none { it in forbiddenDimensions }
+                        val visible = selectedByDimensions && (!isSplitSpacer || enabledSplitModes[i])
                         AnimatedVisibility(visible, exit = fadeOut(), enter = fadeIn()) {
-                            WithSmallTitle(variant.ifEmpty { stringResource(R.string.button_default) }) {
+                            WithSmallTitle(variant.ifEmpty { unfoldedString }) {
                                 Slider(
                                     value = sliderPosition,
                                     onValueChange = { sliderPosition = it },
@@ -167,6 +201,14 @@ private fun DimensionCheckbox(checked: Boolean, dimension: String, onCheckedChan
         Text(dimension)
     }
 }
+
+private fun isAnySplitKeyboardEnabled(prefs: SharedPreferences): Boolean =
+    listOf(
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_LANDSCAPE,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED,
+        Settings.PREF_ENABLE_SPLIT_KEYBOARD_FOLDED_LANDSCAPE,
+    ).any { prefs.getBoolean(it, Defaults.PREF_ENABLE_SPLIT_KEYBOARD) }
 
 private fun createVariantsAndKeys(dimensions: List<String>, baseKey: String): Pair<List<String>, List<String>> {
     val variants = mutableListOf("")
