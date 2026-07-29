@@ -20,6 +20,8 @@ import kotlin.text.split
 object FoldableUtils {
     private const val TAG = "FoldableUtils"
 
+    const val PREF_FORCE_FOLDABLE = "force_foldable_device"
+
     var isFoldable = false
         private set
 
@@ -34,7 +36,8 @@ object FoldableUtils {
 
     /** set [isFoldable] */
     fun init(context: Context) {
-        isFoldable = getFeatureString(context) != null || hasFoldSensor(context)
+        val forceFoldable = context.prefs().getBoolean(PREF_FORCE_FOLDABLE, false)
+        isFoldable = forceFoldable || getFeatureString(context) != null || hasFoldSensor(context)
         Log.i(TAG, if (isFoldable) "foldable" else "not foldable")
     }
 
