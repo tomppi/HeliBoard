@@ -74,16 +74,9 @@ class XLinkTest { // Without the X, SubtypeTests fail with ClassCastException. W
         val url = URL(link)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "HEAD"
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 HeliBoard link checker")
-        val responseCode = connection.responseCode
-        // Reddit blocks automated requests from GitHub-hosted runners even when the page is available.
-        if (responseCode == HttpURLConnection.HTTP_FORBIDDEN && url.host.endsWith("reddit.com")) {
-            println("skipping automated Reddit link check for $link")
-            return
-        }
-        if (responseCode != HttpURLConnection.HTTP_OK)
+        if (connection.responseCode != 200)
             println("error checking $link")
-        assertEquals(HttpURLConnection.HTTP_OK, responseCode)
+        assertEquals(200, connection.responseCode)
     }
 
     private fun checkWikiLink(link: String) {
