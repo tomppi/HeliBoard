@@ -37,6 +37,9 @@ object FoldableUtils {
     var isFolded = false
         private set(value) {
             if (field == value) return
+            // we could reload the keyboard at this point, but according to a user this is not necessary
+            // https://github.com/HeliBorg/HeliBoard/issues/1063#issuecomment-4178571414
+            // The manual override and observer paths reload explicitly through updateFoldedState.
             Log.v(TAG, "set isFolded to $value")
             field = value
         }
@@ -49,7 +52,7 @@ object FoldableUtils {
         override fun onLowMemory() {}
     }
 
-    /** Set [isFoldable] and initialize manual fold-state tracking when requested by the user. */
+    /** set [isFoldable] */
     fun init(context: Context) {
         val appContext = context.applicationContext
         applicationContext = appContext
@@ -121,6 +124,8 @@ object FoldableUtils {
     private const val DISPLAY_FEATURES = "display_features"
     private val displayFeaturesUri = Settings.Global.getUriFor(DISPLAY_FEATURES)
     private val FEATURE_PATTERN = Pattern.compile("([a-z]+)-\\[(\\d+),(\\d+),(\\d+),(\\d+)]-?(flat|half-opened)?")
+    private const val FEATURE_TYPE_FOLD = "fold"
+    private const val FEATURE_TYPE_HINGE = "hinge"
     private const val PATTERN_STATE_FLAT = "flat"
     private const val PATTERN_STATE_HALF_OPENED = "half-opened"
 
@@ -132,12 +137,13 @@ object FoldableUtils {
             try {
                 val matcher = FEATURE_PATTERN.matcher(it)
                 if (!matcher.matches()) return@forEach
-                val featureType = matcher.group(1)
+                val featureType = matcher.group(1) // should be FEATURE_TYPE_FOLD or FEATURE_TYPE_HINGE
                 val state = matcher.group(6)
 
+                // do we have use for anything other than state? featureType might be useful for debugging
                 if (DebugFlags.DEBUG_ENABLED)
                     Log.d(TAG, "found: type $featureType, state $state")
-                return (state != PATTERN_STATE_FLAT && state != PATTERN_STATE_HALF_OPENED)
+                return (state != PATTERN_STATE_FLAT && state != PATTERN_STATE_HALF_OPENED) // or go for FEATURE_TYPE_FOLD/HINGE?
             } catch (e: Exception) {
                 Log.w(TAG, "error when checking $it", e)
             }
@@ -146,7 +152,7 @@ object FoldableUtils {
         return false
     }
 
-    /** Observes changes to [DISPLAY_FEATURES] or hinge angle, and updates [isFolded] on changes. */
+    /** Observes changes to [DISPLAY_FEATURES] or hinge angle, and updates [isFolded] on changes */
     class FoldableObserver(context: Context) {
         private val context = context.applicationContext
         var sensorForDebug = false
@@ -170,6 +176,10 @@ object FoldableUtils {
             override fun onSensorChanged(event: SensorEvent) {
                 if (manualOverrideEnabled) return
                 val angle = event.values?.getOrNull(0)
+                // logs from a user showed that
+                // * 40° is the change between folded and half-open
+                // * 160° is the change between half-open and flat
+                // maybe we should use the sensor range? wait for bug reports + logs
                 if (!sensorForDebug)
                     updateFoldedState((angle ?: 180f) < 40, reloadKeyboard = true)
                 if (DebugFlags.DEBUG_ENABLED)
@@ -182,6 +192,7 @@ object FoldableUtils {
                 updateManualFoldedState(this.context.resources.configuration, reloadKeyboard = false)
                 Log.v(TAG, "using display width override, folded: $isFolded")
             } else {
+                // is one of the methods clearly better? wait for bug reports + logs
                 val featureString = getFeatureString(this.context)
                 if (featureString != null) {
                     this.context.contentResolver.registerContentObserver(displayFeaturesUri, false, featureStringObserver)
@@ -190,6 +201,8 @@ object FoldableUtils {
                 }
                 if (hasFoldSensor(this.context) && (featureString == null || DebugFlags.DEBUG_ENABLED)) {
                     sensorForDebug = featureString != null
+                    // see https://github.com/ryosoftware/folds/blob/master/app/src/main/java/com/ryosoftware/unfolds/UnfoldsCounterService.kt#L67-L83
+                    // -> we could try other sensors
                     val sm = this.context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
                     sm.registerListener(sensorListener, sm.getDefaultSensor(Sensor.TYPE_HINGE_ANGLE), SensorManager.SENSOR_DELAY_UI)
                     Log.v(TAG, "using sensor, for debugging only: $sensorForDebug")
