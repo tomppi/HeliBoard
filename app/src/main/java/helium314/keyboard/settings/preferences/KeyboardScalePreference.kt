@@ -46,6 +46,9 @@ import helium314.keyboard.settings.WithSmallTitle
 import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
 
 // actual key for each setting is baseKey with one _true/_false appended per dimension (need to keep order!)
+// should dimension checkboxes have any other effect than just showing / hiding sliders?
+//  one could argue that e.g. when disabling the split checkbox, then split mode should not affect the setting
+// Split spacer mode now follows that suggestion; the other scale dialogs keep the original display-only behavior.
 @Composable
 fun KeyboardScalePreference(
     name: String,
@@ -67,6 +70,7 @@ fun KeyboardScalePreference(
     Preference(
         name = name,
         onClick = { showDialog = true },
+        // no description because it can easily take up too much space
     )
     if (showDialog)
         KeyboardScaleDialog(
@@ -81,6 +85,7 @@ fun KeyboardScalePreference(
         )
 }
 
+// SliderDialog specialized for keyboard scale settings using multiple sliders with same range, each with a different setting and title
 @Composable
 private fun KeyboardScaleDialog(
     onDismissRequest: () -> Unit,
@@ -95,7 +100,7 @@ private fun KeyboardScaleDialog(
 ) {
     val (variants, keys) = createVariantsAndKeys(dimensions, baseKey)
     val defaultString = stringResource(R.string.button_default)
-    val foldedString = stringResource(R.string.folded)
+    val foldedString = stringResource(R.string.folded) // we want to hide foldable settings for non-foldable phones
     val landscapeString = stringResource(R.string.landscape)
     val unfoldedString = stringResource(R.string.unfolded)
     val ctx = LocalContext.current
@@ -149,6 +154,7 @@ private fun KeyboardScaleDialog(
                         Spacer(Modifier.height(6.dp))
                     } else if (dimensions.size > 1) {
                         dimensions.forEachIndexed { i, dimension ->
+                            // hide "folded" box for non-foldables
                             if (FoldableUtils.isFoldable || !dimension.contains(foldedString))
                                 DimensionCheckbox(checked[i], dimension) {
                                     checked = checked.mapIndexed { j, c -> if (i == j) it else c }
@@ -168,6 +174,7 @@ private fun KeyboardScaleDialog(
                         val forbiddenDimensions = dimensions.filterIndexed { index, _ -> !checked[index] }
                         val selectedByDimensions = variant.split(SPLIT).none { it in forbiddenDimensions }
                         val visible = selectedByDimensions && (!isSplitSpacer || enabledSplitModes[i])
+                        // default animations make the dialog flash (see also DictionaryDialog)
                         AnimatedVisibility(visible, exit = fadeOut(), enter = fadeIn()) {
                             val defaultVariantName = if (isSplitSpacer && FoldableUtils.isFoldable) unfoldedString else defaultString
                             WithSmallTitle(variant.ifEmpty { defaultVariantName }) {
